@@ -6,6 +6,7 @@ import {
   sampleEdges,
   sampleCases,
 } from "@/lib/mockData";
+import { validateCSV, analyzeCSV } from "@/lib/api";
 
 interface AppState {
   hasAnalysis: boolean;
@@ -89,54 +90,65 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUploadedFile: (file) =>
     set({ uploadedFile: file, validationResult: null }),
 
-  validateFile: () => {
+  validateFile: async () => {
     const file = get().uploadedFile;
     if (!file) return;
-    set({
-      validationResult: {
-        columnsDetected: true,
-        timestampValid: true,
-        amountNumeric: true,
-        amountPositive: true,
-        duplicateTxCount: 0,
-        rowsParsed: 14223,
-        invalidRows: 0,
-        columns: ["sender", "receiver", "amount", "timestamp", "tx_id"],
-      },
-    });
+    
+    try {
+      const response = await validateCSV(file);
+      set({ validationResult: response.result });
+    } catch (error) {
+      console.error("[v0] Validation error:", error);
+      set({
+        validationResult: {
+          columnsDetected: false,
+          timestampValid: false,
+          amountNumeric: false,
+          amountPositive: false,
+          duplicateTxCount: 0,
+          rowsParsed: 0,
+          invalidRows: 0,
+          columns: [],
+        },
+      });
+    }
   },
 
   runAnalysis: async () => {
+    const file = get().uploadedFile;
+    if (!file) return;
+    
     set({ isProcessing: true });
     const start = performance.now();
-    await new Promise((r) => setTimeout(r, 1800 + Math.random() * 1200));
-    const elapsed = parseFloat(((performance.now() - start) / 1000).toFixed(1));
-    const newCase: CaseRun = {
-      id: `CASE-${new Date().getFullYear()}-${String(sampleCases.length + 43).padStart(4, "0")}`,
-      date: new Date().toISOString().slice(0, 10),
-      fileName: get().uploadedFile?.name ?? "uploaded.csv",
-      datasetSize: 14200,
-      nodeCount: 342,
-      edgeCount: 1287,
-      txCount: 14200,
-      suspiciousCount: sampleAccounts.filter((a) => a.riskScore >= 60).length,
-      ringCount: sampleRings.length,
-      processingTime: elapsed,
-      riskExposure: 78,
-      timeWindow: "2024-10-01 → 2024-12-14",
-      topPatterns: ["cycle", "fan-in", "layering"],
-      riskLevel: "high",
-    };
-    set({
-      isProcessing: false,
-      processingTime: elapsed,
-      hasAnalysis: true,
-      accounts: sampleAccounts,
-      rings: sampleRings,
-      edges: sampleEdges,
-      currentCase: newCase,
-      cases: [newCase, ...get().cases],
-    });
+    
+    try {
+      const response = await analyzeCSV(file);
+      const elapsed = parseFloat(((performance.now() - start) / 1000).toFixed(1));
+      
+      const newCase: CaseRun = {
+        ...response.case,
+        processingTime: elapsed,
+      };
+      
+      set({
+        isProcessing: false,
+        processingTime: elapsed,
+        hasAnalysis: true,
+        accounts: response.accounts,
+        rings: response.rings,
+        edges: response.edges,
+        currentCase: newCase,
+        cases: [newCase, ...get().cases],
+        validationResult: response.validation || null,
+      });
+    } catch (error) {
+      console.error("[v0] Analysis error:", error);
+      set({
+        isProcessing: false,
+        hasAnalysis: false,
+      });
+      throw error;
+    }
   },
 
   selectAccount: (id) => set({ selectedAccountId: id }),

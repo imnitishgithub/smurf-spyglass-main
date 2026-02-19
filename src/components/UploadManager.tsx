@@ -4,16 +4,60 @@ import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload, FileText, CheckCircle2, AlertTriangle, Loader2, BarChart3, Network, Download } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertTriangle, Loader2, BarChart3, Network, Download, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const UploadManager = () => {
     const { uploadedFile, setUploadedFile, validationResult, validateFile, runAnalysis, isProcessing, hasAnalysis, loadSampleData } = useAppStore();
     const nav = useNavigate();
+    const { toast } = useToast();
     const [dragOver, setDragOver] = useState(false);
+    const [validationError, setValidationError] = useState<string | null>(null);
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
 
     const handleFile = useCallback((file: File) => {
         setUploadedFile(file);
+        setValidationError(null);
+        setAnalysisError(null);
     }, [setUploadedFile]);
+
+    const handleValidate = useCallback(async () => {
+        try {
+            setValidationError(null);
+            await validateFile();
+            toast({
+                title: "Validation successful",
+                description: "CSV file is ready for analysis",
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Validation failed";
+            setValidationError(message);
+            toast({
+                title: "Validation failed",
+                description: message,
+                variant: "destructive",
+            });
+        }
+    }, [validateFile, toast]);
+
+    const handleAnalyze = useCallback(async () => {
+        try {
+            setAnalysisError(null);
+            await runAnalysis();
+            toast({
+                title: "Analysis complete",
+                description: "Fraud detection analysis finished successfully",
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Analysis failed";
+            setAnalysisError(message);
+            toast({
+                title: "Analysis failed",
+                description: message,
+                variant: "destructive",
+            });
+        }
+    }, [runAnalysis, toast]);
 
     const onDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -70,6 +114,18 @@ const UploadManager = () => {
                         </Card>
                     )}
 
+                    {validationError && (
+                        <Card className="p-4 bg-red-50 border-red-200 space-y-2">
+                            <div className="flex items-start gap-2">
+                                <AlertCircle size={16} className="text-red-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold text-red-900">Validation Error</p>
+                                    <p className="text-sm text-red-800 mt-1">{validationError}</p>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
                     {validationResult && (
                         <Card className="p-4 space-y-2">
                             <p className="text-sm font-semibold">Validation Results</p>
@@ -93,14 +149,26 @@ const UploadManager = () => {
                         </Card>
                     )}
 
+                    {analysisError && (
+                        <Card className="p-4 bg-red-50 border-red-200 space-y-2">
+                            <div className="flex items-start gap-2">
+                                <AlertCircle size={16} className="text-red-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold text-red-900">Analysis Error</p>
+                                    <p className="text-sm text-red-800 mt-1">{analysisError}</p>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
                     <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" onClick={validateFile} disabled={!uploadedFile || isProcessing}>
+                        <Button variant="outline" size="sm" onClick={handleValidate} disabled={!uploadedFile || isProcessing}>
                             Validate
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => { loadSampleData(); }} className="gap-1">
                             <Download size={14} /> Sample
                         </Button>
-                        <Button size="sm" onClick={runAnalysis} disabled={!uploadedFile || isProcessing} className="gap-1">
+                        <Button size="sm" onClick={handleAnalyze} disabled={!uploadedFile || isProcessing} className="gap-1">
                             {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
                             Run Detection
                         </Button>
